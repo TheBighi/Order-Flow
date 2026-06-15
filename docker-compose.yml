@@ -1,0 +1,19 @@
+version: '3.9'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: game-tracker-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: qwerty
+      MYSQL_DATABASE: GameTracker
+      MYSQL_USER: game-tracker-user
+      MYSQL_PASSWORD: qwerty
+    ports:
+      - "3306:3306"
+    volumes:
+      - game_tracker_data:/var/lib/mysql
+
+volumes:
+  game_tracker_data:
