@@ -1,17 +1,14 @@
 from fastapi import FastAPI
-from app.core.config import settings
 from app.routers import auth, users
+
 app = FastAPI(
-    title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+    title="FastAPI",
+    openapi_url="/openapi.json"
 )
-# Include routers
-app.include_router(auth.router)
-app.include_router(users.router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to FastAPI JWT Auth Example"}
+    return {"message": "Welcome to FastAPI"}
 
 if __name__ == "__main__":
     import uvicorn
