@@ -10,3 +10,6 @@ async def basic_example():
     await r.aclose()
 
 asyncio.run(basic_example())
+
+#r.flushall()
+#https://redis.io/docs/latest/develop/clients/redis-py/async/
