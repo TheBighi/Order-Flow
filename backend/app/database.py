@@ -1,23 +1,12 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
-from dotenv import load_dotenv
-import os
+import asyncio
+import redis.asyncio as redis
 
-load_dotenv()
+async def basic_example():
+    r = redis.Redis(host='localhost', port=6379, decode_responses=True, password='qwerty')
+    await r.set('foo', 'bar')
+    value = await r.get('foo')
+    print(value)
+    # bar
+    await r.aclose()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-engine = create_engine(DATABASE_URL, echo=True)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-class Base(DeclarativeBase):
-    pass
-
-# inject DB session into routes
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+asyncio.run(basic_example())
