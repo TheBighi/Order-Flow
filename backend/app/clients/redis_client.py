@@ -24,8 +24,17 @@ class OrderBookRedisClient:
         if self.redis:
             await self.redis.aclose()
 
+    async def clear_orderbook(self, symbol: str):
+        symbol = symbol.upper()
+
+        await self.redis.delete(
+            f"orderbook:{symbol}:bids",
+            f"orderbook:{symbol}:asks",
+            f"orderbook:{symbol}:bid_qty",
+            f"orderbook:{symbol}:ask_qty",
+        )
     # ------------------------------------------------------------------
-    # core write — called once per normalised row
+    # core write — called once per normalised
     # ------------------------------------------------------------------
     async def apply_delta(self, symbol: str, row: dict):
         """
@@ -85,3 +94,13 @@ class OrderBookRedisClient:
             {"price": float(p), "qty": float(q or 0)}
             for p, q in zip(prices, qtys)
         ]
+    
+    async def get_snapshot(self, symbol: str, n: int = 25) -> dict:
+        bids = await self.get_best_bids(symbol, n)
+        asks = await self.get_best_asks(symbol, n)
+
+        return {
+            "symbol": symbol.upper(),
+            "bids": bids,
+            "asks": asks,
+        }

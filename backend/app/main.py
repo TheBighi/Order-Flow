@@ -1,18 +1,38 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from app.ws.connection_manager import ConnectionManager
+from app.clients.redis_client import OrderBookRedisClient
+from app.ws.redis_subscriber import redis_orderbook_subscriber
+from contextlib import asynccontextmanager
+import asyncio
 
 import uuid
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    subscriber_task = asyncio.create_task(redis_orderbook_subscriber(manager))
+
+    yield
+
+    subscriber_task.cancel()
 
 app = FastAPI(
     title="Order Book Backend",
     openapi_url="/openapi.json",
+    lifespan=lifespan
 )
 
 manager = ConnectionManager()
+redis_client = OrderBookRedisClient()
 
 @app.get("/")
 async def root():
     return {"message": "Order book backend is alive"}
+
+@app.get("/snapshot")
+async def get_snapshot():
+    await redis_client.connect()
+    snapshot = await redis_client.get_snapshot("BTCUSDT", 25)
+    return snapshot
 
 @app.websocket("/ws/orderbook")
 async def orderbook_websocket(websocket: WebSocket):
