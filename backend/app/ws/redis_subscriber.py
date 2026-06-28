@@ -17,9 +17,7 @@ async def redis_orderbook_subscriber(manager, symbol: str = "BTCUSDT"):
             continue
 
         delta = json.loads(message["data"])
-
-        print(delta)
-
+    
         await manager.broadcast({
             "type": "delta",
             "data": delta,

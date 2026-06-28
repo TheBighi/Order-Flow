@@ -28,24 +28,27 @@ redis_client = OrderBookRedisClient()
 async def root():
     return {"message": "Order book backend is alive"}
 
-@app.get("/snapshot")
-async def get_snapshot():
-    await redis_client.connect()
-    snapshot = await redis_client.get_snapshot("BTCUSDT", 25)
-    return snapshot
-
-@app.websocket("/ws/orderbook")
-async def orderbook_websocket(websocket: WebSocket):
+@app.websocket("/ws/orderbook/{symbol}")
+async def orderbook_websocket(websocket: WebSocket, symbol: str):
+    symbol = symbol.upper()
     client_id = str(uuid.uuid4())
 
-    await manager.connect(client_id, websocket)
+    await manager.connect(client_id, symbol, websocket)
+
+    await redis_client.connect()
+    snapshot = await redis_client.get_snapshot(symbol, 25)
+
+    await websocket.send_json({
+        "type": "snapshot",
+        "data": snapshot,
+    })
 
     try:
         while True:
             await websocket.receive_text()
 
     except WebSocketDisconnect:
-        manager.disconnect(client_id)
+        manager.disconnect(client_id, symbol)
 
 @app.post("/test-broadcast")
 async def test_broadcast():
