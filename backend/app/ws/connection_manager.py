@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import WebSocket
 
 
@@ -10,7 +11,7 @@ class ConnectionManager:
 
         symbol = symbol.upper()
 
-        if symbol not in self.clients:
+        if symbol not in self.clients:  # { symbol: { "conn_idx1" : websocket_obj, "conn_idx2": websocket_obj } }
             self.clients[symbol] = {}
 
         self.clients[symbol][client_id] = websocket
@@ -31,15 +32,23 @@ class ConnectionManager:
 
         print(f"Client disconnected: {client_id} from {symbol}")
 
-    async def broadcast(self, message: dict):
+    async def broadcast_to_symbol(self, symbol: str, message: dict):
+        symbol = symbol.upper()
+        symbol_clients = self.clients.get(symbol)
+
+        if not symbol_clients:
+            return
+
         dead_clients = []
 
-        for symbol, symbol_clients in self.clients.items():
-            for client_id, websocket in symbol_clients.items():
-                try:
-                    await websocket.send_json(message)
-                except Exception:
-                    dead_clients.append((client_id, symbol))
+        clients = list(symbol_clients.items())
+
+        tasks = [ws.send_json(message) for _, ws in clients]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for (client_id, _), result in zip(clients, results):
+            if isinstance(result, Exception):
+                dead_clients.append((client_id, symbol))
 
         for client_id, symbol in dead_clients:
             self.disconnect(client_id, symbol)

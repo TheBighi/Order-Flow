@@ -7,8 +7,12 @@ import asyncio
 
 import uuid
 
+manager = ConnectionManager()
+redis_client = OrderBookRedisClient()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await redis_client.connect()
     subscriber_task = asyncio.create_task(redis_orderbook_subscriber(manager))
 
     yield
@@ -21,12 +25,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-manager = ConnectionManager()
-redis_client = OrderBookRedisClient()
-
 @app.get("/")
 async def root():
     return {"message": "Order book backend is alive"}
+
+@app.get("/snapshot/{symbol}")
+async def get_snapshot(symbol: str):
+    return await redis_client.get_snapshot(symbol.upper(), 25)
 
 @app.websocket("/ws/orderbook/{symbol}")
 async def orderbook_websocket(websocket: WebSocket, symbol: str):
@@ -34,14 +39,6 @@ async def orderbook_websocket(websocket: WebSocket, symbol: str):
     client_id = str(uuid.uuid4())
 
     await manager.connect(client_id, symbol, websocket)
-
-    await redis_client.connect()
-    snapshot = await redis_client.get_snapshot(symbol, 25)
-
-    await websocket.send_json({
-        "type": "snapshot",
-        "data": snapshot,
-    })
 
     try:
         while True:
@@ -51,14 +48,17 @@ async def orderbook_websocket(websocket: WebSocket, symbol: str):
         manager.disconnect(client_id, symbol)
 
 @app.post("/test-broadcast")
-async def test_broadcast():
-    await manager.broadcast({
+async def test_broadcast(symbol: str = "BTCUSDT"):
+    symbol = symbol.upper()
+
+    await manager.broadcast_to_symbol(symbol, {
         "type": "test",
+        "symbol": symbol,
         "message": "hello connected clients",
-        "connected_clients": len(manager.clients),
+        "connected_clients": len(manager.clients.get(symbol, {})),
     })
 
-    return {"sent_to": len(manager.clients)}
+    return {"sent_to": len(manager.clients.get(symbol, {}))}
 
 if __name__ == "__main__":
     import uvicorn
