@@ -1,8 +1,9 @@
 import json
 import redis.asyncio as aioredis
 
-REDIS_URL = "redis://:qwerty@localhost:6379"
+from app.metrics import record_orderbook_update
 
+REDIS_URL = "redis://:qwerty@localhost:6379"
 
 async def redis_orderbook_subscriber(manager):
     redis = await aioredis.from_url(REDIS_URL, decode_responses=True)
@@ -20,6 +21,8 @@ async def redis_orderbook_subscriber(manager):
 
         channel = message["channel"]
         symbol = channel.split(":")[1]  
+
+        record_orderbook_update(symbol, delta["side"])
     
         await manager.broadcast_to_symbol(symbol, {
             "type": "delta",

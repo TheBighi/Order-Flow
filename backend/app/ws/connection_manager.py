@@ -1,6 +1,8 @@
 import asyncio
 from fastapi import WebSocket
 
+from app.metrics import set_connected_clients
+
 
 class ConnectionManager:
     def __init__(self):
@@ -15,6 +17,7 @@ class ConnectionManager:
             self.clients[symbol] = {}
 
         self.clients[symbol][client_id] = websocket
+        set_connected_clients(symbol, len(self.clients[symbol]))
 
         print(f"Client connected: {client_id} watching {symbol}")
 
@@ -26,10 +29,12 @@ class ConnectionManager:
             return
 
         symbol_clients.pop(client_id, None)
+        remaining_clients = len(symbol_clients)
 
         if not symbol_clients:
             self.clients.pop(symbol, None)
 
+        set_connected_clients(symbol, remaining_clients)
         print(f"Client disconnected: {client_id} from {symbol}")
 
     async def broadcast_to_symbol(self, symbol: str, message: dict):

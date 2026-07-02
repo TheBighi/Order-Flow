@@ -1,5 +1,8 @@
 import json
+from time import perf_counter
 import redis.asyncio as aioredis
+
+from app.metrics import observe_redis_zrange
 
 REDIS_URL = "redis://:qwerty@localhost:6379"
 
@@ -72,7 +75,10 @@ class OrderBookRedisClient:
         key     = _key(symbol, "ask")
         qty_key = f"orderbook:{symbol.upper()}:ask_qty"
 
+        start_time = perf_counter()
         prices = await self.redis.zrangebyscore(key, 0, "+inf", start=0, num=n)
+        observe_redis_zrange(symbol, "ask", (perf_counter() - start_time) * 1000)
+
         qtys   = await self.redis.hmget(qty_key, *prices) if prices else []
 
         return [
@@ -87,7 +93,10 @@ class OrderBookRedisClient:
         key     = _key(symbol, "bid")
         qty_key = f"orderbook:{symbol.upper()}:bid_qty"
 
+        start_time = perf_counter()
         prices = await self.redis.zrevrangebyscore(key, "+inf", 0, start=0, num=n)
+        observe_redis_zrange(symbol, "bid", (perf_counter() - start_time) * 1000)
+
         qtys   = await self.redis.hmget(qty_key, *prices) if prices else []
 
         return [

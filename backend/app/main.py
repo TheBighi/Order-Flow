@@ -1,14 +1,20 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
+from contextlib import asynccontextmanager
+import asyncio
+import uuid
+
+from app.ws.ws_consumer import ws_consumer
 from app.ws.connection_manager import ConnectionManager
 from app.clients.redis_client import OrderBookRedisClient
 from app.ws.redis_subscriber import redis_orderbook_subscriber
-from contextlib import asynccontextmanager
-import asyncio
-
-import uuid
+from app.metrics import render_prometheus_metrics
 
 manager = ConnectionManager()
 redis_client = OrderBookRedisClient()
+
+ALLOWED_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+
+active_consumers: dict[str, asyncio.Task] = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,17 +31,43 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+def ensure_consumer_running(symbol: str):
+    symbol = symbol.upper()
+
+    if symbol in active_consumers:
+        return
+
+    active_consumers[symbol] = asyncio.create_task(ws_consumer(symbol))
+    print(f"Started Binance consumer for {symbol}")
+    return True
+
 @app.get("/")
 async def root():
     return {"message": "Order book backend is alive"}
 
+@app.get("/metrics")
+async def metrics():
+    content, media_type = render_prometheus_metrics()
+    return Response(content=content, media_type=media_type)
+
 @app.get("/snapshot/{symbol}")
 async def get_snapshot(symbol: str):
+    if symbol.upper() not in ALLOWED_SYMBOLS:
+        return
+    if ensure_consumer_running(symbol):
+        return "message: redis warming up"
     return await redis_client.get_snapshot(symbol.upper(), 25)
 
 @app.websocket("/ws/orderbook/{symbol}")
 async def orderbook_websocket(websocket: WebSocket, symbol: str):
+    if symbol.upper() not in ALLOWED_SYMBOLS:
+        await websocket.close(code=1008)
+        return
+    
+    ensure_consumer_running(symbol)
+
     symbol = symbol.upper()
+    
     client_id = str(uuid.uuid4())
 
     await manager.connect(client_id, symbol, websocket)
