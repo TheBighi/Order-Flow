@@ -1,121 +1,81 @@
 import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { DepthChart } from './DepthChart.jsx'
+import { MetricsPanel } from './MetricsPanel.jsx'
+import { OrderBook } from './OrderBook.jsx'
+import { TradeFeed } from './TradeFeed.jsx'
+import { useOrderBook } from './useOrderBook.js'
 import './App.css'
 
+const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT']
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT')
+  const {
+    asks,
+    bids,
+    changedLevels,
+    connect,
+    error,
+    lastDelta,
+    renderMs,
+    status,
+    symbol,
+    updatesPerSecond,
+  } = useOrderBook()
+
+  function handleSymbolConnect() {
+    connect(selectedSymbol)
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
+    <main className="app-shell">
+      <section className="top-bar">
         <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
+          <h1>Order Book</h1>
+          <p>{symbol}</p>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
 
-      <div className="ticks"></div>
+        <div className="symbol-controls">
+          <select
+            aria-label="Symbol"
+            value={selectedSymbol}
+            onChange={(event) => setSelectedSymbol(event.target.value)}
+          >
+            {SYMBOLS.map((nextSymbol) => (
+              <option key={nextSymbol} value={nextSymbol}>
+                {nextSymbol}
+              </option>
+            ))}
+          </select>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
+          <button type="button" onClick={handleSymbolConnect}>
+            Connect
+          </button>
         </div>
       </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      {error ? <p className="error-banner">{error}</p> : null}
+
+      <section className="dashboard-grid">
+        <OrderBook asks={asks} bids={bids} changedLevels={changedLevels} />
+        <DepthChart asks={asks} bids={bids} />
+        <MetricsPanel
+          renderMs={renderMs}
+          status={status}
+          symbol={symbol}
+          updatesPerSecond={updatesPerSecond}
+        />
+        <TradeFeed symbol={symbol} />
+      </section>
+
+      <section className="panel latest-delta">
+        <div className="panel-header">
+          <h2>Latest Delta</h2>
+          <span>{lastDelta ? lastDelta.side : 'waiting'}</span>
+        </div>
+        <pre>{lastDelta ? JSON.stringify(lastDelta, null, 2) : 'No delta received yet'}</pre>
+      </section>
+    </main>
   )
 }
 

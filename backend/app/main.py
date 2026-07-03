@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
 import uuid
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.ws.ws_consumer import ws_consumer
 from app.ws.connection_manager import ConnectionManager
@@ -12,7 +14,7 @@ from app.metrics import render_prometheus_metrics
 manager = ConnectionManager()
 redis_client = OrderBookRedisClient()
 
-ALLOWED_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+ALLOWED_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"}
 
 active_consumers: dict[str, asyncio.Task] = {}
 
@@ -29,6 +31,31 @@ app = FastAPI(
     title="Order Book Backend",
     openapi_url="/openapi.json",
     lifespan=lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+origins = [
+    "http://localhost:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 def ensure_consumer_running(symbol: str):
