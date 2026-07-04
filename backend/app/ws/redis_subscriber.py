@@ -5,13 +5,13 @@ from app.metrics import record_orderbook_update
 
 REDIS_URL = "redis://:qwerty@localhost:6379"
 
-async def redis_orderbook_subscriber(manager):
+async def redis_orderbook_subscriber(orderbook_manager, trade_manager):
     redis = await aioredis.from_url(REDIS_URL, decode_responses=True)
 
     pubsub = redis.pubsub()
-    await pubsub.psubscribe("orderbook:*")
+    await pubsub.psubscribe("orderbook:*", "trades:*")
 
-    print("Redis listener activated")
+    print("Redis listener activated for order books and trades")
 
     async for message in pubsub.listen():
         if message["type"] != "pmessage":
@@ -20,12 +20,20 @@ async def redis_orderbook_subscriber(manager):
         delta = json.loads(message["data"])
 
         channel = message["channel"]
-        symbol = channel.split(":")[1]  
+        channel_type, symbol = channel.split(":", 1)
 
-        record_orderbook_update(symbol, delta["side"])
-    
-        await manager.broadcast_to_symbol(symbol, {
-            "type": "delta",
-            "data": delta,
-            "symbol": symbol,
-        })
+        if channel_type == "orderbook":
+            record_orderbook_update(symbol, delta["side"])
+
+            await orderbook_manager.broadcast_to_symbol(symbol, {
+                "type": "delta",
+                "data": delta,
+                "symbol": symbol,
+            })
+
+        if channel_type == "trades":
+            await trade_manager.broadcast_to_symbol(symbol, {
+                "type": "trade",
+                "data": delta,
+                "symbol": symbol,
+            })

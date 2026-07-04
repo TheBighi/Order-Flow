@@ -29,3 +29,28 @@ async def stream_binance_depth(symbol: str = "btcusdt") -> AsyncGenerator[dict, 
             
         await asyncio.sleep(delay)
         delay = min(delay * 2, max_delay)
+
+
+async def stream_binance_trades(symbol: str = "btcusdt") -> AsyncGenerator[dict, None]:
+    url = f"wss://stream.binance.com:9443/ws/{symbol}@trade"
+    delay = 1
+    max_delay = 60
+
+    while True:
+        try:
+            logger.info(f"Connecting to {url}...")
+            async with websockets.connect(url) as websocket:
+                print(f"Connected! Listening for {symbol.upper()} trades...")
+                delay = 1
+
+                async for message in websocket:
+                    data = json.loads(message)
+                    yield data
+
+        except (websockets.exceptions.ConnectionClosed, OSError) as e:
+            logger.warning(f"Trade stream lost ({type(e).__name__}). Retrying in {delay}s...")
+        except Exception as e:
+            logger.error(f"Unexpected trade stream error: {e}. Retrying in {delay}s...")
+
+        await asyncio.sleep(delay)
+        delay = min(delay * 2, max_delay)

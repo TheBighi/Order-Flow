@@ -14,6 +14,12 @@ def _key(symbol: str, side: str) -> str:
 def _channel(symbol: str) -> str:
     return f"orderbook:{symbol.upper()}"
 
+def _trade_key(symbol: str) -> str:
+    return f"trades:{symbol.upper()}:recent"
+
+def _trade_channel(symbol: str) -> str:
+    return f"trades:{symbol.upper()}"
+
 
 class OrderBookRedisClient:
     def __init__(self, url: str = REDIS_URL):
@@ -36,6 +42,38 @@ class OrderBookRedisClient:
             f"orderbook:{symbol}:bid_qty",
             f"orderbook:{symbol}:ask_qty",
         )
+
+    async def clear_trades(self, symbol: str):
+        await self.redis.delete(_trade_key(symbol))
+
+    async def load_snapshot(self, symbol: str, bids: list[tuple[str, str]], asks: list[tuple[str, str]]):
+        symbol = symbol.upper()
+        await self.clear_orderbook(symbol)
+
+        async def _load_side(side: str, levels: list[tuple[str, str]]):
+            key = _key(symbol, side)
+            qty_key = f"orderbook:{symbol}:{side}_qty"
+
+            zadd_mapping = {}
+            qty_mapping = {}
+
+            for price_str, qty_str in levels:
+                price = float(price_str)
+                qty = float(qty_str)
+
+                if qty == 0.0:
+                    continue
+
+                zadd_mapping[str(price)] = price
+                qty_mapping[str(price)] = qty
+
+            if zadd_mapping:
+                await self.redis.zadd(key, zadd_mapping)
+                await self.redis.hset(qty_key, mapping=qty_mapping)
+
+        await _load_side("bid", bids)
+        await _load_side("ask", asks)
+
     # ------------------------------------------------------------------
     # core write — called once per normalised
     # ------------------------------------------------------------------
@@ -51,8 +89,12 @@ class OrderBookRedisClient:
         qty   = row["qty"]
 
         if qty == 0.0:
-            # remove the price level from the sorted set
+            # remove the price level from both the sorted set and the
+            # companion qty hash — previously only zrem happened here,
+            # leaving the qty hash growing forever
+            qty_key = f"orderbook:{symbol.upper()}:{row['side']}_qty"
             await self.redis.zrem(key, str(price))
+            await self.redis.hdel(qty_key, str(price))
         else:
             # score = price  → set stays sorted cheapest→most expensive
             # member = str(price) so each price level is unique
@@ -63,6 +105,13 @@ class OrderBookRedisClient:
 
         # publish every delta (including removals) so subscribers stay live
         await self.redis.publish(_channel(symbol), json.dumps(row))
+
+    async def apply_trade(self, symbol: str, trade: dict):
+        key = _trade_key(symbol)
+
+        await self.redis.lpush(key, json.dumps(trade))
+        await self.redis.ltrim(key, 0, 49)
+        await self.redis.publish(_trade_channel(symbol), json.dumps(trade))
 
     # ------------------------------------------------------------------
     # reads
@@ -113,3 +162,7 @@ class OrderBookRedisClient:
             "bids": bids,
             "asks": asks,
         }
+
+    async def get_recent_trades(self, symbol: str, n: int = 50) -> list[dict]:
+        trades = await self.redis.lrange(_trade_key(symbol), 0, n - 1)
+        return [json.loads(trade) for trade in trades]

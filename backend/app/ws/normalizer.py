@@ -27,3 +27,20 @@ def normalize_delta(raw: dict) -> list[dict]:
         })
 
     return rows
+
+
+def normalize_trade(raw: dict) -> dict:
+    """
+    Map a raw Binance trade message to
+    { trade_id, price, qty, side, timestamp }.
+
+    Binance field `m` means buyer is maker. If buyer is maker, the taker
+    sold into resting bids, so display it as a sell. Otherwise display buy.
+    """
+    return {
+        "trade_id": raw["t"],
+        "price": float(raw["p"]),
+        "qty": float(raw["q"]),
+        "side": "sell" if raw["m"] else "buy",
+        "timestamp": raw["T"],
+    }

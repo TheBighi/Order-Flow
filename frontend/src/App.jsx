@@ -65,7 +65,7 @@ function App() {
           symbol={symbol}
           updatesPerSecond={updatesPerSecond}
         />
-        <TradeFeed symbol={symbol} />
+        <TradeFeed key={symbol} symbol={symbol} />
       </section>
 
       <section className="panel latest-delta">

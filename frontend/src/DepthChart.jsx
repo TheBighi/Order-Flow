@@ -38,6 +38,94 @@ function nearestRow(rows, index) {
   return rows[Math.max(0, Math.min(rows.length - 1, index))]
 }
 
+function formatLadderPrice(value) {
+  return Number(value).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function formatLadderQty(value) {
+  return Number(value).toLocaleString(undefined, {
+    maximumFractionDigits: 6,
+  })
+}
+
+function DepthLadder({ asks, bids, levels = 10 }) {
+  const visibleAsks = asks.slice(0, levels)
+  const visibleBids = bids.slice(0, levels)
+
+  // Farthest ask at the top, best ask sitting right above the spread —
+  // asks arrive sorted best-first (ascending price), so reverse for display.
+  const orderedAsks = [...visibleAsks].reverse()
+
+  const maxQty = Math.max(
+    1,
+    ...visibleAsks.map((level) => Number(level.qty)),
+    ...visibleBids.map((level) => Number(level.qty)),
+  )
+
+  function LadderRow({ level, side }) {
+    const isAsk = side === 'ask'
+    const barWidth = `${Math.max(2, (Number(level.qty) / maxQty) * 100)}%`
+
+    return (
+      <div
+        key={`${side}:${level.price}`}
+        style={{
+          position: 'relative',
+          display: 'flex',
+          justifyContent: 'space-between',
+          padding: '2px 8px',
+          fontFamily: 'ui-monospace, Consolas, monospace',
+          fontSize: '12px',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            right: 0,
+            width: barWidth,
+            background: isAsk ? 'rgba(220, 38, 38, 0.22)' : 'rgba(22, 163, 74, 0.22)',
+          }}
+        />
+        <span style={{ position: 'relative', color: isAsk ? '#dc2626' : '#16a34a' }}>
+          {formatLadderPrice(level.price)}
+        </span>
+        <span style={{ position: 'relative', color: '#e5e7eb' }}>
+          {formatLadderQty(level.qty)}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="depth-ladder" style={{ marginTop: '16px' }}>
+      {orderedAsks.map((level) => (
+        <LadderRow level={level} side="ask" key={`ask:${level.price}`} />
+      ))}
+      <div
+        style={{
+          borderTop: '1px solid #4b5563',
+          borderBottom: '1px solid #4b5563',
+          margin: '4px 0',
+          padding: '2px 8px',
+          fontSize: '11px',
+          color: '#9ca3af',
+        }}
+      >
+        Spread
+      </div>
+      {visibleBids.map((level) => (
+        <LadderRow level={level} side="bid" key={`bid:${level.price}`} />
+      ))}
+    </div>
+  )
+}
+
 export function DepthChart({ asks, bids }) {
   const canvasRef = useRef(null)
   const animationRef = useRef(null)
@@ -234,6 +322,7 @@ export function DepthChart({ asks, bids }) {
         onPointerLeave={() => setHoverPoint(null)}
         onPointerMove={handlePointerMove}
       />
+      <DepthLadder asks={asks} bids={bids} />
     </section>
   )
 }

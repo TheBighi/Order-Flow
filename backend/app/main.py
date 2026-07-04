@@ -3,15 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
 import uuid
-from fastapi.middleware.cors import CORSMiddleware
 
-from app.ws.ws_consumer import ws_consumer
+from app.ws.ws_consumer import trade_consumer, ws_consumer
 from app.ws.connection_manager import ConnectionManager
 from app.clients.redis_client import OrderBookRedisClient
 from app.ws.redis_subscriber import redis_orderbook_subscriber
 from app.metrics import render_prometheus_metrics
 
-manager = ConnectionManager()
+orderbook_manager = ConnectionManager()
+trade_manager = ConnectionManager()
 redis_client = OrderBookRedisClient()
 
 ALLOWED_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"}
@@ -21,11 +21,12 @@ active_consumers: dict[str, asyncio.Task] = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await redis_client.connect()
-    subscriber_task = asyncio.create_task(redis_orderbook_subscriber(manager))
+    subscriber_task = asyncio.create_task(redis_orderbook_subscriber(orderbook_manager, trade_manager))
 
     yield
 
     subscriber_task.cancel()
+    await redis_client.close()
 
 app = FastAPI(
     title="Order Book Backend",
@@ -46,27 +47,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-origins = [
-    "http://localhost:5173",
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 def ensure_consumer_running(symbol: str):
     symbol = symbol.upper()
 
-    if symbol in active_consumers:
-        return
+    started = False
 
-    active_consumers[symbol] = asyncio.create_task(ws_consumer(symbol))
-    print(f"Started Binance consumer for {symbol}")
-    return True
+    orderbook_key = f"{symbol}:orderbook"
+    trade_key = f"{symbol}:trades"
+
+    if orderbook_key not in active_consumers:
+        active_consumers[orderbook_key] = asyncio.create_task(ws_consumer(symbol))
+        print(f"Started Binance order book consumer for {symbol}")
+        started = True
+
+    if trade_key not in active_consumers:
+        active_consumers[trade_key] = asyncio.create_task(trade_consumer(symbol))
+        print(f"Started Binance trade consumer for {symbol}")
+        started = True
+
+    return started
 
 @app.get("/")
 async def root():
@@ -81,9 +80,16 @@ async def metrics():
 async def get_snapshot(symbol: str):
     if symbol.upper() not in ALLOWED_SYMBOLS:
         return
-    if ensure_consumer_running(symbol):
-        return "message: redis warming up"
-    return await redis_client.get_snapshot(symbol.upper(), 25)
+
+    ensure_consumer_running(symbol)
+    snapshot = await redis_client.get_snapshot(symbol.upper(), 25)
+
+    if not snapshot["bids"] and not snapshot["asks"]:
+        snapshot["status"] = "warming_up"
+    else:
+        snapshot["status"] = "ready"
+
+    return snapshot
 
 @app.websocket("/ws/orderbook/{symbol}")
 async def orderbook_websocket(websocket: WebSocket, symbol: str):
@@ -97,27 +103,65 @@ async def orderbook_websocket(websocket: WebSocket, symbol: str):
     
     client_id = str(uuid.uuid4())
 
-    await manager.connect(client_id, symbol, websocket)
+    await orderbook_manager.connect(client_id, symbol, websocket)
 
     try:
         while True:
             await websocket.receive_text()
 
     except WebSocketDisconnect:
-        manager.disconnect(client_id, symbol)
+        orderbook_manager.disconnect(client_id, symbol)
+
+@app.get("/trades/{symbol}")
+async def get_recent_trades(symbol: str):
+    if symbol.upper() not in ALLOWED_SYMBOLS:
+        return
+
+    ensure_consumer_running(symbol)
+    return {
+        "symbol": symbol.upper(),
+        "trades": await redis_client.get_recent_trades(symbol.upper(), 50),
+    }
+
+@app.websocket("/ws/trades/{symbol}")
+async def trades_websocket(websocket: WebSocket, symbol: str):
+    if symbol.upper() not in ALLOWED_SYMBOLS:
+        await websocket.close(code=1008)
+        return
+
+    ensure_consumer_running(symbol)
+
+    symbol = symbol.upper()
+    client_id = str(uuid.uuid4())
+
+    await trade_manager.connect(client_id, symbol, websocket)
+
+    recent_trades = await redis_client.get_recent_trades(symbol, 50)
+    await websocket.send_json({
+        "type": "trade_snapshot",
+        "symbol": symbol,
+        "data": recent_trades,
+    })
+
+    try:
+        while True:
+            await websocket.receive_text()
+
+    except WebSocketDisconnect:
+        trade_manager.disconnect(client_id, symbol)
 
 @app.post("/test-broadcast")
 async def test_broadcast(symbol: str = "BTCUSDT"):
     symbol = symbol.upper()
 
-    await manager.broadcast_to_symbol(symbol, {
+    await orderbook_manager.broadcast_to_symbol(symbol, {
         "type": "test",
         "symbol": symbol,
         "message": "hello connected clients",
-        "connected_clients": len(manager.clients.get(symbol, {})),
+        "connected_clients": len(orderbook_manager.clients.get(symbol, {})),
     })
 
-    return {"sent_to": len(manager.clients.get(symbol, {}))}
+    return {"sent_to": len(orderbook_manager.clients.get(symbol, {}))}
 
 if __name__ == "__main__":
     import uvicorn
