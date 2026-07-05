@@ -4,7 +4,7 @@ const API_BASE_URL = 'http://localhost:8000'
 const WS_BASE_URL = 'ws://localhost:8000'
 
 function rowsToMap(rows = []) {
-  return new Map(rows.map((row) => [String(row.price), row.qty]))
+  return new Map(rows.map((row) => [String(Number(row.price)), row.qty]))
 }
 
 function mapToRows(levels, side) {
@@ -51,7 +51,7 @@ export function useOrderBook() {
 
     for (const delta of bufferedDeltas) {
       const sideKey = delta.side === 'bid' ? 'bids' : 'asks'
-      const priceKey = String(delta.price)
+      const priceKey = String(Number(delta.price))
 
       changed.add(`${delta.side}:${priceKey}`)
 
@@ -183,6 +183,15 @@ export function useOrderBook() {
     [scheduleFlush],
   )
 
+  const disconnect = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
+    }
+
+    setStatus('disconnected')
+  }, [])
+
   useEffect(() => {
     updatesTimerRef.current = window.setInterval(() => {
       setUpdatesPerSecond(updateCountRef.current)
@@ -211,6 +220,7 @@ export function useOrderBook() {
     bids,
     changedLevels,
     connect,
+    disconnect,
     error,
     lastDelta,
     renderMs,

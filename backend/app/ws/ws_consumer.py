@@ -11,10 +11,6 @@ SNAPSHOT_LIMIT = 1000
 
 
 def _fetch_snapshot_sync(symbol: str) -> dict:
-    """
-    Blocking REST call — run via asyncio.to_thread so it doesn't stall
-    the event loop. No extra HTTP dependency required.
-    """
     url = f"{BINANCE_REST_URL}?symbol={symbol.upper()}&limit={SNAPSHOT_LIMIT}"
     with urllib.request.urlopen(url, timeout=10) as response:
         return json.loads(response.read())
@@ -29,12 +25,6 @@ async def ws_consumer(symbol: str = "btcusdt"):
     await client.connect()
 
     while True:
-        # Per Binance's documented procedure for maintaining a local order
-        # book: 1) open the diff stream and buffer events, 2) fetch a REST
-        # snapshot with lastUpdateId, 3) discard buffered events where
-        # u <= lastUpdateId, 4) the first applied event must satisfy
-        # U <= lastUpdateId+1 <= u, 5) each subsequent event's U must equal
-        # the previous event's u+1 — any gap means resync from step 1.
         buffered = []
         last_applied_u = None
         synced = False
@@ -44,14 +34,6 @@ async def ws_consumer(symbol: str = "btcusdt"):
             stream = stream_binance_depth(symbol.lower())
 
             async for raw in stream:
-                # Don't request the snapshot until buffering has actually
-                # started (i.e. the websocket is live and yielding events).
-                # Firing the REST call at the same instant we start
-                # connecting the websocket races the handshake — on a
-                # busy book the snapshot can end up newer than expected
-                # relative to the first buffered event, or there's a gap
-                # nothing buffered, and the U/lastUpdateId alignment check
-                # below fails every single time instead of occasionally.
                 if snapshot_task is None:
                     snapshot_task = asyncio.create_task(fetch_snapshot(symbol))
 
@@ -73,7 +55,7 @@ async def ws_consumer(symbol: str = "btcusdt"):
 
                     for event in pending:
                         if event["u"] <= last_update_id:
-                            continue  # older than snapshot, discard
+                            continue
 
                         if not applied_first:
                             if not (event["U"] <= last_update_id + 1 <= event["u"]):

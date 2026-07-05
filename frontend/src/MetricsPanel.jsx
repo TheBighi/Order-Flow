@@ -44,7 +44,7 @@ export function MetricsPanel({ renderMs, status, symbol, updatesPerSecond }) {
   }, [symbol])
 
   return (
-    <section className="panel metrics-panel">
+    <section className="terminal-panel metrics-panel">
       <div className="panel-header">
         <h2>Metrics</h2>
         <span>{metricsStatus}</span>

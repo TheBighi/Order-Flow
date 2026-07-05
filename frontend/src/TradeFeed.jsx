@@ -12,7 +12,20 @@ function formatPrice(value) {
 
 function formatQty(value) {
   return Number(value).toLocaleString(undefined, {
-    maximumFractionDigits: 6,
+    maximumFractionDigits: 4,
+  })
+}
+
+function formatTime(timestamp) {
+  if (!timestamp) {
+    return '--:--:--'
+  }
+
+  return new Date(timestamp).toLocaleTimeString(undefined, {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
   })
 }
 
@@ -88,16 +101,26 @@ export function TradeFeed({ symbol }) {
   }, [symbol])
 
   return (
-    <section className="panel trade-feed">
+    <section className="terminal-panel trade-feed">
       <div className="panel-header">
-        <h2>Trades</h2>
-        <span>{status}</span>
+        <h2>Live Trades</h2>
+        <span className={status === 'connected' ? 'live-dot' : ''}>{status}</span>
+      </div>
+
+      <div className="trade-heading">
+        <span>Time</span>
+        <span>Price</span>
+        <span>Qty</span>
       </div>
 
       <div className="trade-list">
         {trades.length ? (
           trades.map((trade, index) => (
-            <div className={trade.side === 'sell' ? 'sell' : 'buy'} key={`${trade.timestamp}-${index}`}>
+            <div
+              className={trade.side === 'sell' ? 'sell' : 'buy'}
+              key={`${trade.timestamp}-${index}`}
+            >
+              <span>{formatTime(trade.timestamp)}</span>
               <span>{formatPrice(trade.price)}</span>
               <span>{formatQty(trade.qty)}</span>
             </div>
