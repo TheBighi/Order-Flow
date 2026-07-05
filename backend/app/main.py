@@ -7,12 +7,14 @@ import uuid
 from app.ws.ws_consumer import trade_consumer, ws_consumer
 from app.ws.connection_manager import ConnectionManager
 from app.clients.redis_client import OrderBookRedisClient
+from app.ws.coalesce import DeltaCoalescer
 from app.ws.redis_subscriber import redis_orderbook_subscriber
 from app.metrics import render_prometheus_metrics
 
 orderbook_manager = ConnectionManager()
 trade_manager = ConnectionManager()
 redis_client = OrderBookRedisClient()
+orderbook_coalescer = DeltaCoalescer(flush_ms=100)
 
 ALLOWED_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"}
 
@@ -21,11 +23,15 @@ active_consumers: dict[str, asyncio.Task] = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await redis_client.connect()
-    subscriber_task = asyncio.create_task(redis_orderbook_subscriber(orderbook_manager, trade_manager))
+    subscriber_task = asyncio.create_task(
+        redis_orderbook_subscriber(orderbook_manager, trade_manager, orderbook_coalescer)
+    )
+    coalescer_task = asyncio.create_task(orderbook_coalescer.flush_loop(orderbook_manager))
 
     yield
 
     subscriber_task.cancel()
+    coalescer_task.cancel()
     await redis_client.close()
 
 app = FastAPI(

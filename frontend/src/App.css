@@ -400,6 +400,18 @@
   text-transform: uppercase;
 }
 
+.backpressure-state {
+  color: #00d984;
+}
+
+.backpressure-state.warning {
+  color: #ffd166;
+}
+
+.backpressure-state.failed {
+  color: #ff3856;
+}
+
 .trade-feed {
   overflow: hidden;
   border-right: 0;

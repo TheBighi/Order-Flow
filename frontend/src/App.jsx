@@ -13,6 +13,7 @@ function App() {
   const {
     asks,
     bids,
+    backpressureStatus,
     changedLevels,
     connect,
     disconnect,
@@ -113,6 +114,7 @@ function App() {
           </section>
 
           <MetricsPanel
+            backpressureStatus={backpressureStatus}
             renderMs={renderMs}
             status={status}
             symbol={symbol}

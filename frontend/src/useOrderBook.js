@@ -28,8 +28,10 @@ export function useOrderBook() {
   const [updatesPerSecond, setUpdatesPerSecond] = useState(0)
   const [lastDelta, setLastDelta] = useState(null)
   const [error, setError] = useState('')
+  const [backpressureStatus, setBackpressureStatus] = useState('ok')
 
   const wsRef = useRef(null)
+  const activeSymbolRef = useRef('BTCUSDT')
   const bookRef = useRef({ bids: new Map(), asks: new Map() })
   const deltaBufferRef = useRef([])
   const frameRef = useRef(null)
@@ -85,6 +87,26 @@ export function useOrderBook() {
     frameRef.current = window.requestAnimationFrame(flushDeltas)
   }, [flushDeltas])
 
+  const loadSnapshot = useCallback(async (normalizedSymbol) => {
+    const snapshotResponse = await fetch(`${API_BASE_URL}/snapshot/${normalizedSymbol}`)
+
+    if (!snapshotResponse.ok) {
+      throw new Error(`Snapshot request failed: ${snapshotResponse.status}`)
+    }
+
+    const snapshot = await snapshotResponse.json()
+
+    if (snapshot && typeof snapshot === 'object' && Array.isArray(snapshot.bids)) {
+      bookRef.current = {
+        bids: rowsToMap(snapshot.bids),
+        asks: rowsToMap(snapshot.asks),
+      }
+
+      setBids(mapToRows(bookRef.current.bids, 'bid'))
+      setAsks(mapToRows(bookRef.current.asks, 'ask'))
+    }
+  }, [])
+
   const connect = useCallback(
     async (nextSymbol) => {
       const normalizedSymbol = nextSymbol.toUpperCase()
@@ -94,8 +116,10 @@ export function useOrderBook() {
       }
 
       setSymbol(normalizedSymbol)
+      activeSymbolRef.current = normalizedSymbol
       setStatus('connecting')
       setError('')
+      setBackpressureStatus('ok')
       setBids([])
       setAsks([])
       setLastDelta(null)
@@ -104,23 +128,7 @@ export function useOrderBook() {
       bookRef.current = { bids: new Map(), asks: new Map() }
 
       try {
-        const snapshotResponse = await fetch(`${API_BASE_URL}/snapshot/${normalizedSymbol}`)
-
-        if (!snapshotResponse.ok) {
-          throw new Error(`Snapshot request failed: ${snapshotResponse.status}`)
-        }
-
-        const snapshot = await snapshotResponse.json()
-
-        if (snapshot && typeof snapshot === 'object' && Array.isArray(snapshot.bids)) {
-          bookRef.current = {
-            bids: rowsToMap(snapshot.bids),
-            asks: rowsToMap(snapshot.asks),
-          }
-
-          setBids(mapToRows(bookRef.current.bids, 'bid'))
-          setAsks(mapToRows(bookRef.current.asks, 'ask'))
-        }
+        await loadSnapshot(normalizedSymbol)
 
         const ws = new WebSocket(`${WS_BASE_URL}/ws/orderbook/${normalizedSymbol}`)
         wsRef.current = ws
@@ -147,6 +155,25 @@ export function useOrderBook() {
             }
             setBids(mapToRows(bookRef.current.bids, 'bid'))
             setAsks(mapToRows(bookRef.current.asks, 'ask'))
+            return
+          }
+
+          if (message.type === 'resync_required') {
+            setBackpressureStatus('resyncing')
+            deltaBufferRef.current = []
+            loadSnapshot(activeSymbolRef.current)
+              .then(() => setBackpressureStatus('recovered'))
+              .catch((snapshotError) => {
+                setBackpressureStatus('failed')
+                setError(snapshotError.message)
+              })
+            return
+          }
+
+          if (message.type === 'delta_batch' && Array.isArray(message.data)) {
+            deltaBufferRef.current.push(...message.data)
+            updateCountRef.current += message.data.length
+            scheduleFlush()
             return
           }
 
@@ -180,7 +207,7 @@ export function useOrderBook() {
         setError(connectError.message)
       }
     },
-    [scheduleFlush],
+    [loadSnapshot, scheduleFlush],
   )
 
   const disconnect = useCallback(() => {
@@ -190,6 +217,7 @@ export function useOrderBook() {
     }
 
     setStatus('disconnected')
+    setBackpressureStatus('ok')
   }, [])
 
   useEffect(() => {
@@ -222,6 +250,7 @@ export function useOrderBook() {
     connect,
     disconnect,
     error,
+    backpressureStatus,
     lastDelta,
     renderMs,
     status,

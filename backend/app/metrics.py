@@ -13,6 +13,18 @@ connected_clients = Gauge(
     ["symbol"],
 )
 
+backpressure_queue_depth = Gauge(
+    "backpressure_queue_depth",
+    "Current queued outbound WebSocket messages per client.",
+    ["symbol", "client_id"],
+)
+
+backpressure_clients = Gauge(
+    "backpressure_clients",
+    "Current clients above the backpressure warning threshold.",
+    ["symbol"],
+)
+
 backpressure_events_total = Counter(
     "backpressure_events_total",
     "Total backpressure events detected for WebSocket clients.",
@@ -32,6 +44,18 @@ def record_orderbook_update(symbol: str, side: str):
 
 def set_connected_clients(symbol: str, count: int):
     connected_clients.labels(symbol=symbol.upper()).set(count)
+
+
+def set_backpressure_queue_depth(symbol: str, client_id: str, depth: int):
+    backpressure_queue_depth.labels(symbol=symbol.upper(), client_id=client_id).set(depth)
+
+
+def clear_backpressure_queue_depth(symbol: str, client_id: str):
+    backpressure_queue_depth.remove(symbol.upper(), client_id)
+
+
+def set_backpressure_clients(symbol: str, count: int):
+    backpressure_clients.labels(symbol=symbol.upper()).set(count)
 
 
 def record_backpressure_event(symbol: str):

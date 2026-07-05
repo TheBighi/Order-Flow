@@ -5,7 +5,7 @@ from app.metrics import record_orderbook_update
 
 REDIS_URL = "redis://:qwerty@localhost:6379"
 
-async def redis_orderbook_subscriber(orderbook_manager, trade_manager):
+async def redis_orderbook_subscriber(orderbook_manager, trade_manager, orderbook_coalescer):
     redis = await aioredis.from_url(REDIS_URL, decode_responses=True)
 
     pubsub = redis.pubsub()
@@ -24,12 +24,7 @@ async def redis_orderbook_subscriber(orderbook_manager, trade_manager):
 
         if channel_type == "orderbook":
             record_orderbook_update(symbol, delta["side"])
-
-            await orderbook_manager.broadcast_to_symbol(symbol, {
-                "type": "delta",
-                "data": delta,
-                "symbol": symbol,
-            })
+            await orderbook_coalescer.add(symbol, delta)
 
         if channel_type == "trades":
             await trade_manager.broadcast_to_symbol(symbol, {
