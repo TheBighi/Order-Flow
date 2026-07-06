@@ -7,6 +7,30 @@ orderbook_updates_total = Counter(
     ["symbol", "side"],
 )
 
+trade_updates_total = Counter(
+    "trade_updates_total",
+    "Total trade updates received from Redis pub/sub.",
+    ["symbol"],
+)
+
+websocket_messages_sent_total = Counter(
+    "websocket_messages_sent_total",
+    "Total outbound WebSocket messages sent to clients.",
+    ["symbol", "message_type"],
+)
+
+snapshot_requests_total = Counter(
+    "snapshot_requests_total",
+    "Total order book snapshot requests.",
+    ["symbol"],
+)
+
+binance_reconnects_total = Counter(
+    "binance_reconnects_total",
+    "Total Binance WebSocket reconnect attempts after stream errors.",
+    ["symbol", "stream"],
+)
+
 connected_clients = Gauge(
     "connected_clients",
     "Current connected WebSocket clients.",
@@ -40,6 +64,25 @@ redis_zrangebyscore_duration_ms = Histogram(
 
 def record_orderbook_update(symbol: str, side: str):
     orderbook_updates_total.labels(symbol=symbol.upper(), side=side).inc()
+
+
+def record_trade_update(symbol: str):
+    trade_updates_total.labels(symbol=symbol.upper()).inc()
+
+
+def record_websocket_message_sent(symbol: str, message_type: str):
+    websocket_messages_sent_total.labels(
+        symbol=symbol.upper(),
+        message_type=message_type,
+    ).inc()
+
+
+def record_snapshot_request(symbol: str):
+    snapshot_requests_total.labels(symbol=symbol.upper()).inc()
+
+
+def record_binance_reconnect(symbol: str, stream: str):
+    binance_reconnects_total.labels(symbol=symbol.upper(), stream=stream).inc()
 
 
 def set_connected_clients(symbol: str, count: int):

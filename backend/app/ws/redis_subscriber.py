@@ -1,7 +1,7 @@
 import json
 import redis.asyncio as aioredis
 
-from app.metrics import record_orderbook_update
+from app.metrics import record_orderbook_update, record_trade_update
 
 REDIS_URL = "redis://:qwerty@localhost:6379"
 
@@ -27,6 +27,7 @@ async def redis_orderbook_subscriber(orderbook_manager, trade_manager, orderbook
             await orderbook_coalescer.add(symbol, delta)
 
         if channel_type == "trades":
+            record_trade_update(symbol)
             await trade_manager.broadcast_to_symbol(symbol, {
                 "type": "trade",
                 "data": delta,

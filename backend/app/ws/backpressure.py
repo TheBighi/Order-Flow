@@ -4,6 +4,8 @@ from typing import Callable
 
 from fastapi import WebSocket
 
+from app.metrics import record_websocket_message_sent
+
 
 MAX_QUEUE_DEPTH = 200
 WARN_QUEUE_DEPTH = 120
@@ -37,6 +39,7 @@ class ClientConnection:
             while True:
                 message = await self.queue.get()
                 await self.websocket.send_json(message)
+                record_websocket_message_sent(self.symbol, message.get("type", "unknown"))
                 self.queue.task_done()
                 on_queue_depth_change(self.symbol, self.client_id, self.queue_depth())
         except asyncio.CancelledError:

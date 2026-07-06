@@ -4,6 +4,8 @@ import logging
 import websockets
 from typing import AsyncGenerator
 
+from app.metrics import record_binance_reconnect
+
 logger = logging.getLogger(__name__)
 
 async def stream_binance_depth(symbol: str = "btcusdt") -> AsyncGenerator[dict, None]:
@@ -26,7 +28,8 @@ async def stream_binance_depth(symbol: str = "btcusdt") -> AsyncGenerator[dict, 
             logger.warning(f"Connection lost ({type(e).__name__}). Retrying in {delay}s...")
         except Exception as e:
             logger.error(f"Unexpected error: {e}. Retrying in {delay}s...")
-            
+
+        record_binance_reconnect(symbol, "depth")
         await asyncio.sleep(delay)
         delay = min(delay * 2, max_delay)
 
@@ -52,5 +55,6 @@ async def stream_binance_trades(symbol: str = "btcusdt") -> AsyncGenerator[dict,
         except Exception as e:
             logger.error(f"Unexpected trade stream error: {e}. Retrying in {delay}s...")
 
+        record_binance_reconnect(symbol, "trade")
         await asyncio.sleep(delay)
         delay = min(delay * 2, max_delay)

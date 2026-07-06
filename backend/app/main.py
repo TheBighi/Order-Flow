@@ -9,7 +9,7 @@ from app.ws.connection_manager import ConnectionManager
 from app.clients.redis_client import OrderBookRedisClient
 from app.ws.coalesce import DeltaCoalescer
 from app.ws.redis_subscriber import redis_orderbook_subscriber
-from app.metrics import render_prometheus_metrics
+from app.metrics import record_snapshot_request, render_prometheus_metrics
 
 orderbook_manager = ConnectionManager()
 trade_manager = ConnectionManager()
@@ -87,6 +87,7 @@ async def get_snapshot(symbol: str):
     if symbol.upper() not in ALLOWED_SYMBOLS:
         return
 
+    record_snapshot_request(symbol)
     ensure_consumer_running(symbol)
     snapshot = await redis_client.get_snapshot(symbol.upper(), 25)
 
