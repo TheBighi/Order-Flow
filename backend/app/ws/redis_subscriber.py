@@ -13,23 +13,27 @@ async def redis_orderbook_subscriber(orderbook_manager, trade_manager, orderbook
 
     print("Redis listener activated for order books and trades")
 
-    async for message in pubsub.listen():
-        if message["type"] != "pmessage":
-            continue
+    try:
+        async for message in pubsub.listen():
+            if message["type"] != "pmessage":
+                continue
 
-        delta = json.loads(message["data"])
+            delta = json.loads(message["data"])
 
-        channel = message["channel"]
-        channel_type, symbol = channel.split(":", 1)
+            channel = message["channel"]
+            channel_type, symbol = channel.split(":", 1)
 
-        if channel_type == "orderbook":
-            record_orderbook_update(symbol, delta["side"])
-            await orderbook_coalescer.add(symbol, delta)
+            if channel_type == "orderbook":
+                record_orderbook_update(symbol, delta["side"])
+                await orderbook_coalescer.add(symbol, delta)
 
-        if channel_type == "trades":
-            record_trade_update(symbol)
-            await trade_manager.broadcast_to_symbol(symbol, {
-                "type": "trade",
-                "data": delta,
-                "symbol": symbol,
-            })
+            if channel_type == "trades":
+                record_trade_update(symbol)
+                await trade_manager.broadcast_to_symbol(symbol, {
+                    "type": "trade",
+                    "data": delta,
+                    "symbol": symbol,
+                })
+    finally:
+        await pubsub.aclose()
+        await redis.aclose()

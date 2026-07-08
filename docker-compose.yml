@@ -26,15 +26,25 @@ services:
     container_name: grafana
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3333:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
-
+  k6:
+    image: grafana/k6:latest
+    profiles:
+      - loadtest
+    volumes:
+      - ./load-test:/scripts
+    command: run /scripts/k6-spike.js
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 volumes:
   redis-data:
   prometheus-data:
   grafana-data:
+
+# docker compose --profile loadtest run --rm k6

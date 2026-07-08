@@ -30,8 +30,12 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    subscriber_task.cancel()
-    coalescer_task.cancel()
+    shutdown_tasks = [subscriber_task, coalescer_task, *active_consumers.values()]
+
+    for task in shutdown_tasks:
+        task.cancel()
+
+    await asyncio.gather(*shutdown_tasks, return_exceptions=True)
     await redis_client.close()
 
 app = FastAPI(
@@ -117,6 +121,8 @@ async def orderbook_websocket(websocket: WebSocket, symbol: str):
             await websocket.receive_text()
 
     except WebSocketDisconnect:
+        pass
+    finally:
         orderbook_manager.disconnect(client_id, symbol)
 
 @app.get("/trades/{symbol}")
@@ -155,6 +161,8 @@ async def trades_websocket(websocket: WebSocket, symbol: str):
             await websocket.receive_text()
 
     except WebSocketDisconnect:
+        pass
+    finally:
         trade_manager.disconnect(client_id, symbol)
 
 @app.post("/test-broadcast")
