@@ -229,6 +229,23 @@ async def test_broadcast(symbol: str = "BTCUSDT"):
 
     return {"sent_to": len(orderbook_manager.clients.get(symbol, {}))}
 
+@app.get("/health")
+async def health():
+    return {"message": "App healthy"}
+
+@app.get("/ready")
+async def health():
+    await redis_client.connect()
+
+    try:
+        pong = await redis_client.ping()
+    except Exception as e:
+        return {"message": "Redis down"}
+
+    await redis_client.close()
+
+    return {"message": pong}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

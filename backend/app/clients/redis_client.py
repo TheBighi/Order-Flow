@@ -1,10 +1,14 @@
 import json
+import os
 from time import perf_counter
 import redis.asyncio as aioredis
 
 from app.metrics import observe_redis_zrange
 
-REDIS_URL = "redis://:qwerty@localhost:6379"
+REDIS_URL = os.getenv(
+    "REDIS_URL",
+    os.getenv("DATABASE_URL", "redis://:qwerty@localhost:6379"),
+)
 
 # key schema
 def _key(symbol: str, side: str) -> str:
@@ -32,6 +36,10 @@ class OrderBookRedisClient:
     async def close(self):
         if self.redis:
             await self.redis.aclose()
+
+    async def ping(self):
+        pong = await self.redis.ping()
+        return pong
 
     async def clear_orderbook(self, symbol: str):
         symbol = symbol.upper()

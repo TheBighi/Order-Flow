@@ -9,6 +9,18 @@ services:
       - redis-data:/data
     command: redis-server --requirepass "qwerty" --appendonly yes
 
+  backend:
+    build:
+      context: ./backend
+    container_name: backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_URL: redis://:qwerty@redis:6379
+    depends_on:
+      - redis
+
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
@@ -19,7 +31,7 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     depends_on:
-      - redis
+      - backend
 
   grafana:
     image: grafana/grafana-enterprise:latest
@@ -40,6 +52,11 @@ services:
     volumes:
       - ./load-test:/scripts
     command: run /scripts/k6-spike.js
+    environment:
+      HTTP_BASE_URL: http://backend:8000
+      WS_BASE_URL: ws://backend:8000
+    depends_on:
+      - backend
     extra_hosts:
       - "host.docker.internal:host-gateway"
 volumes:

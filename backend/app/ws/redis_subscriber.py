@@ -1,9 +1,13 @@
 import json
+import os
 import redis.asyncio as aioredis
 
 from app.metrics import record_orderbook_update, record_trade_update
 
-REDIS_URL = "redis://:qwerty@localhost:6379"
+REDIS_URL = os.getenv(
+    "REDIS_URL",
+    os.getenv("DATABASE_URL", "redis://:qwerty@localhost:6379"),
+)
 
 async def redis_orderbook_subscriber(orderbook_manager, trade_manager, orderbook_coalescer):
     redis = await aioredis.from_url(REDIS_URL, decode_responses=True)
