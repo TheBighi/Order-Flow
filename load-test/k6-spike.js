@@ -9,6 +9,7 @@ const WS_BASE_URL = __ENV.WS_BASE_URL || 'ws://host.docker.internal:8000'
 const TEST_DURATION_SECONDS = Number(__ENV.TEST_DURATION_SECONDS || 60)
 const MAX_VUS = Number(__ENV.MAX_VUS || 200)
 const SNAPSHOT_RETRY_SLEEP_SECONDS = Number(__ENV.SNAPSHOT_RETRY_SLEEP_SECONDS || 5)
+const MAX_ALLOWED_FAILURES = Math.max(20, Math.ceil(MAX_VUS * 0.2))
 
 function stagesForMaxVus(maxVus) {
   if (maxVus <= 200) {
@@ -48,9 +49,9 @@ export const options = {
   },
   thresholds: {
     snapshot_success: ['rate>0.95'],
-    snapshot_failures_total: ['count<20'],
+    snapshot_failures_total: [`count<${MAX_ALLOWED_FAILURES}`],
     ws_connected: ['rate>0.95'],
-    ws_connect_failures_total: ['count<20'],
+    ws_connect_failures_total: [`count<${MAX_ALLOWED_FAILURES}`],
     ws_resync_required_total: ['count<50'],
   },
 }

@@ -65,12 +65,14 @@ def ensure_consumer_running(symbol: str):
     orderbook_key = f"{symbol}:orderbook"
     trade_key = f"{symbol}:trades"
 
-    if orderbook_key not in active_consumers:
+    orderbook_task = active_consumers.get(orderbook_key)
+    if orderbook_task is None or orderbook_task.done():
         active_consumers[orderbook_key] = asyncio.create_task(ws_consumer(symbol))
         print(f"Started Binance order book consumer for {symbol}")
         started = True
 
-    if trade_key not in active_consumers:
+    trade_task = active_consumers.get(trade_key)
+    if trade_task is None or trade_task.done():
         active_consumers[trade_key] = asyncio.create_task(trade_consumer(symbol))
         print(f"Started Binance trade consumer for {symbol}")
         started = True

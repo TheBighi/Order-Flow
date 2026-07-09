@@ -94,7 +94,10 @@ def set_backpressure_queue_depth(symbol: str, client_id: str, depth: int):
 
 
 def clear_backpressure_queue_depth(symbol: str, client_id: str):
-    backpressure_queue_depth.remove(symbol.upper(), client_id)
+    try:
+        backpressure_queue_depth.remove(symbol.upper(), client_id)
+    except KeyError:
+        pass
 
 
 def set_backpressure_clients(symbol: str, count: int):

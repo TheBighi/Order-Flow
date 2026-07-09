@@ -29,12 +29,12 @@ function formatTime(timestamp) {
   })
 }
 
-export function TradeFeed({ symbol }) {
-  const [status, setStatus] = useState('connecting')
+export function TradeFeed({ enabled, symbol }) {
+  const [status, setStatus] = useState('not connected')
   const [trades, setTrades] = useState([])
 
   useEffect(() => {
-    if (!symbol) {
+    if (!enabled || !symbol) {
       return undefined
     }
 
@@ -98,13 +98,20 @@ export function TradeFeed({ symbol }) {
       isCurrent = false
       ws.close()
     }
-  }, [symbol])
+  }, [enabled, symbol])
+
+  const displayStatus = enabled
+    ? status === 'not connected'
+      ? 'connecting'
+      : status
+    : 'not connected'
+  const visibleTrades = enabled ? trades : []
 
   return (
     <section className="terminal-panel trade-feed">
       <div className="panel-header">
         <h2>Live Trades</h2>
-        <span className={status === 'connected' ? 'live-dot' : ''}>{status}</span>
+        <span className={displayStatus === 'connected' ? 'live-dot' : ''}>{displayStatus}</span>
       </div>
 
       <div className="trade-heading">
@@ -114,8 +121,8 @@ export function TradeFeed({ symbol }) {
       </div>
 
       <div className="trade-list">
-        {trades.length ? (
-          trades.map((trade, index) => (
+        {visibleTrades.length ? (
+          visibleTrades.map((trade, index) => (
             <div
               className={trade.side === 'sell' ? 'sell' : 'buy'}
               key={`${trade.timestamp}-${index}`}

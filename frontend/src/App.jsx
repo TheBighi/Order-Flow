@@ -122,7 +122,7 @@ function App() {
           />
         </section>
 
-        <TradeFeed key={symbol} symbol={symbol} />
+        <TradeFeed enabled={status === 'connected'} key={symbol} symbol={symbol} />
       </section>
     </main>
   )
