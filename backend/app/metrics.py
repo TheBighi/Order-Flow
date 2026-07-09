@@ -25,6 +25,18 @@ snapshot_requests_total = Counter(
     ["symbol"],
 )
 
+snapshot_cache_hits_total = Counter(
+    "snapshot_cache_hits_total",
+    "Total snapshot requests served from the short in-memory cache.",
+    ["symbol"],
+)
+
+snapshot_cache_misses_total = Counter(
+    "snapshot_cache_misses_total",
+    "Total snapshot requests that had to read fresh data from Redis.",
+    ["symbol"],
+)
+
 binance_reconnects_total = Counter(
     "binance_reconnects_total",
     "Total Binance WebSocket reconnect attempts after stream errors.",
@@ -79,6 +91,14 @@ def record_websocket_message_sent(symbol: str, message_type: str):
 
 def record_snapshot_request(symbol: str):
     snapshot_requests_total.labels(symbol=symbol.upper()).inc()
+
+
+def record_snapshot_cache_hit(symbol: str):
+    snapshot_cache_hits_total.labels(symbol=symbol.upper()).inc()
+
+
+def record_snapshot_cache_miss(symbol: str):
+    snapshot_cache_misses_total.labels(symbol=symbol.upper()).inc()
 
 
 def record_binance_reconnect(symbol: str, stream: str):

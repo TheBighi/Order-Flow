@@ -3,13 +3,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
 import uuid
+from time import monotonic
 
 from app.ws.ws_consumer import trade_consumer, ws_consumer
 from app.ws.connection_manager import ConnectionManager
 from app.clients.redis_client import OrderBookRedisClient
 from app.ws.coalesce import DeltaCoalescer
 from app.ws.redis_subscriber import redis_orderbook_subscriber
-from app.metrics import record_snapshot_request, render_prometheus_metrics
+from app.metrics import (
+    record_snapshot_cache_hit,
+    record_snapshot_cache_miss,
+    record_snapshot_request,
+    render_prometheus_metrics,
+)
 
 orderbook_manager = ConnectionManager()
 trade_manager = ConnectionManager()
@@ -17,8 +23,11 @@ redis_client = OrderBookRedisClient()
 orderbook_coalescer = DeltaCoalescer(flush_ms=100)
 
 ALLOWED_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"}
+SNAPSHOT_CACHE_TTL_SECONDS = 0.5
 
 active_consumers: dict[str, asyncio.Task] = {}
+snapshot_cache: dict[str, tuple[float, dict]] = {}
+snapshot_cache_locks: dict[str, asyncio.Lock] = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -79,6 +88,50 @@ def ensure_consumer_running(symbol: str):
 
     return started
 
+def get_cached_snapshot(symbol: str):
+    entry = snapshot_cache.get(symbol)
+
+    if not entry:
+        return None
+
+    expires_at, snapshot = entry
+
+    if monotonic() >= expires_at:
+        snapshot_cache.pop(symbol, None)
+        return None
+
+    record_snapshot_cache_hit(symbol)
+    return snapshot
+
+async def get_snapshot_with_cache(symbol: str):
+    cached_snapshot = get_cached_snapshot(symbol)
+
+    if cached_snapshot:
+        return cached_snapshot
+
+    lock = snapshot_cache_locks.setdefault(symbol, asyncio.Lock())
+
+    async with lock:
+        cached_snapshot = get_cached_snapshot(symbol)
+
+        if cached_snapshot:
+            return cached_snapshot
+
+        snapshot = await redis_client.get_snapshot(symbol, 25)
+
+        if not snapshot["bids"] and not snapshot["asks"]:
+            snapshot["status"] = "warming_up"
+        else:
+            snapshot["status"] = "ready"
+
+        snapshot_cache[symbol] = (
+            monotonic() + SNAPSHOT_CACHE_TTL_SECONDS,
+            snapshot,
+        )
+        record_snapshot_cache_miss(symbol)
+
+        return snapshot
+
 @app.get("/")
 async def root():
     return {"message": "Order book backend is alive"}
@@ -90,19 +143,15 @@ async def metrics():
 
 @app.get("/snapshot/{symbol}")
 async def get_snapshot(symbol: str):
-    if symbol.upper() not in ALLOWED_SYMBOLS:
+    symbol = symbol.upper()
+
+    if symbol not in ALLOWED_SYMBOLS:
         return
 
     record_snapshot_request(symbol)
     ensure_consumer_running(symbol)
-    snapshot = await redis_client.get_snapshot(symbol.upper(), 25)
 
-    if not snapshot["bids"] and not snapshot["asks"]:
-        snapshot["status"] = "warming_up"
-    else:
-        snapshot["status"] = "ready"
-
-    return snapshot
+    return await get_snapshot_with_cache(symbol)
 
 @app.websocket("/ws/orderbook/{symbol}")
 async def orderbook_websocket(websocket: WebSocket, symbol: str):
