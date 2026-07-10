@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'localhost:8000'
 
 const API_BASE_URL = 'http://' + BACKEND_URL
 
