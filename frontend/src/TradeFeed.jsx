@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 
-const API_BASE_URL = 'http://localhost:8000'
-const WS_BASE_URL = 'ws://localhost:8000'
+const BACKEND_URL = import.meta.env.BACKEND_URL
+
+const API_BASE_URL = 'http://' + BACKEND_URL
+const WS_BASE_URL = 'ws://' + BACKEND_URL
 
 function formatPrice(value) {
   return Number(value).toLocaleString(undefined, {

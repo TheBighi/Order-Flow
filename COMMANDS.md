@@ -13,9 +13,9 @@ root/frontend: npm run dev
 # URLs
 
 Backend: http://127.0.0.1:8000<br>
-Frontend: http://127.0.0.1:5167<br>
+Frontend: http://127.0.0.1:5173<br>
 Prometheus: http://127.0.0.1:9090<br>
-Grafana: http://127.0.0.1:3000
+Grafana: http://127.0.0.1:3333
 
 # Grafana queries
 

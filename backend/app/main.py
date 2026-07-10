@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
@@ -146,7 +146,7 @@ async def get_snapshot(symbol: str):
     symbol = symbol.upper()
 
     if symbol not in ALLOWED_SYMBOLS:
-        return
+        raise HTTPException(status_code=404, detail="Unsupported symbol")
 
     record_snapshot_request(symbol)
     ensure_consumer_running(symbol)
@@ -179,7 +179,7 @@ async def orderbook_websocket(websocket: WebSocket, symbol: str):
 @app.get("/trades/{symbol}")
 async def get_recent_trades(symbol: str):
     if symbol.upper() not in ALLOWED_SYMBOLS:
-        return
+        raise HTTPException(status_code=404, detail="Unsupported symbol")
 
     ensure_consumer_running(symbol)
     return {
@@ -216,33 +216,16 @@ async def trades_websocket(websocket: WebSocket, symbol: str):
     finally:
         trade_manager.disconnect(client_id, symbol)
 
-@app.post("/test-broadcast")
-async def test_broadcast(symbol: str = "BTCUSDT"):
-    symbol = symbol.upper()
-
-    await orderbook_manager.broadcast_to_symbol(symbol, {
-        "type": "test",
-        "symbol": symbol,
-        "message": "hello connected clients",
-        "connected_clients": len(orderbook_manager.clients.get(symbol, {})),
-    })
-
-    return {"sent_to": len(orderbook_manager.clients.get(symbol, {}))}
-
 @app.get("/health")
 async def health():
     return {"message": "App healthy"}
 
 @app.get("/ready")
-async def health():
-    await redis_client.connect()
-
+async def ready():
     try:
         pong = await redis_client.ping()
-    except Exception as e:
+    except Exception:
         return {"message": "Redis down"}
-
-    await redis_client.close()
 
     return {"message": pong}
 
