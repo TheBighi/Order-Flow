@@ -27,7 +27,8 @@ The core of the project is the end-to-end handling of live, high-frequency data:
 - **Backpressure behavior:** each client has a bounded async send queue. If the queue fills, the server clears stale messages and asks that client to reload a fresh snapshot.
 - **Frontend frame control:** `useOrderBook.js` buffers incoming deltas and applies them on `requestAnimationFrame`, which keeps rendering responsive during bursts.
 - **Observable by default:** the app tracks update counts, connected clients, queue depth, backpressure events, Redis read latency, snapshot cache hits/misses, and Binance reconnects.
-- Load testing results
+- Load testing results:
+
 | Max VUs | Snapshot success | WS connect success | Backpressure resyncs | WS messages/sec | Snapshot p95 |
 | --- | --- | --- | --- | --- | --- |
 | 200 | 100% | 100% | 0 | ~518 | ~3.12ms |
