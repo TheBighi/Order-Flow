@@ -29,7 +29,7 @@ The core of the project is the end-to-end handling of live, high-frequency data:
 - **Observable by default:** the app tracks update counts, connected clients, queue depth, backpressure events, Redis read latency, snapshot cache hits/misses, and Binance reconnects.
 - Load testing results:
 
-| Max VUs | Snapshot success | WS connect success | Backpressure resyncs | WS messages/sec | Snapshot p95 |
+| Max VUs | Snapshot success | WS connect success | Backpressure resyncs | WS messages/sec | Snapshot p95 delay |
 | --- | --- | --- | --- | --- | --- |
 | 200 | 100% | 100% | 0 | ~518 | ~3.12ms |
 | 500 | 97.74% | 95.81% | 0 | ~1207 | ~3.92ms |
