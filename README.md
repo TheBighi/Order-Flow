@@ -1,8 +1,8 @@
-# Orderflow
+# Order flow
 
 Real-time crypto order book and trade-flow dashboard built around Binance market data, FastAPI WebSockets, Redis, React, Prometheus, Grafana, and k6.
-
-This project is a live market-data pipeline, not a static demo. It ingests Binance depth and trade streams, keeps the current order book in Redis, fans updates out to browser clients, renders the top-of-book and cumulative depth in React, and exposes enough metrics to understand how the system behaves under load.
+ 
+This project is a live market-data pipeline. It ingests Binance depth and trade streams, keeps the current order book in Redis, fans updates out to browser clients, renders the top-of-book and cumulative depth in React, and exposes enough metrics to understand how the system behaves under load.
 
 ## What It Does
 
@@ -27,7 +27,11 @@ The core of the project is the end-to-end handling of live, high-frequency data:
 - **Backpressure behavior:** each client has a bounded async send queue. If the queue fills, the server clears stale messages and asks that client to reload a fresh snapshot.
 - **Frontend frame control:** `useOrderBook.js` buffers incoming deltas and applies them on `requestAnimationFrame`, which keeps rendering responsive during bursts.
 - **Observable by default:** the app tracks update counts, connected clients, queue depth, backpressure events, Redis read latency, snapshot cache hits/misses, and Binance reconnects.
-
+- Load testing results
+| Max VUs | Snapshot success | WS connect success | Backpressure resyncs | WS messages/sec | Snapshot p95 |
+| --- | --- | --- | --- | --- | --- |
+| 200 | 100% | 100% | 0 | ~518 | ~3.12ms |
+| 500 | 97.74% | 95.81% | 0 | ~1207 | ~3.92ms |
 ## Images
 
 ### Frontend orderbook
@@ -38,30 +42,7 @@ The core of the project is the end-to-end handling of live, high-frequency data:
 
 ## Architecture
 
-```text
-Binance REST snapshot
-        |
-        v
-Binance WebSocket depth/trade streams
-        |
-        v
-FastAPI ingestion workers
-        |
-        v
-Redis sorted sets / hashes / recent trade lists
-        |
-        v
-Redis Pub/Sub
-        |
-        v
-FastAPI WebSocket fan-out + 100ms delta coalescing + backpressure queues
-        |
-        v
-React dashboard
-
-FastAPI /metrics --> Prometheus --> Grafana
-k6 WebSocket spike test --> FastAPI
-```
+![Architecture](https://raw.githubusercontent.com/TheBighi/TheBighi/refs/heads/main/images/Architecture.png)
 
 ## Tech Stack
 
