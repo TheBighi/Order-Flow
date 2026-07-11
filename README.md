@@ -1,8 +1,15 @@
-# Order flow
+# Orderflow
 
-Real-time crypto order book and trade-flow dashboard built around Binance market data, FastAPI WebSockets, Redis, React, Prometheus, Grafana, and k6.
- 
-This project is a live market-data pipeline. It ingests Binance depth and trade streams, keeps the current order book in Redis, fans updates out to browser clients, renders the top-of-book and cumulative depth in React, and exposes enough metrics to understand how the system behaves under load.
+Real-time crypto order book and trade-flow dashboard built around Binance 
+market data, FastAPI WebSockets, Redis, React, Prometheus, Grafana, and k6.
+
+This project is a live market-data pipeline. It ingests Binance depth and 
+trade streams, keeps the current order book in Redis, fans updates out to 
+browser clients, renders the top-of-book and cumulative depth in React, and 
+exposes enough metrics to understand how the system behaves under load.
+
+> 200 concurrent clients · 518 WebSocket messages/sec ·  0 backpressure 
+> resyncs · 3.12ms snapshot p95 delay · under k6 spike load test
 
 ## What It Does
 
@@ -26,7 +33,7 @@ The core of the project is the end-to-end handling of live, high-frequency data:
 - **Async fan-out:** FastAPI runs ingestion, Redis subscription, and coalesced broadcasting as background asyncio tasks instead of tying them to request lifetimes.
 - **Backpressure behavior:** each client has a bounded async send queue. If the queue fills, the server clears stale messages and asks that client to reload a fresh snapshot.
 - **Frontend frame control:** `useOrderBook.js` buffers incoming deltas and applies them on `requestAnimationFrame`, which keeps rendering responsive during bursts.
-- **Observable by default:** the app tracks update counts, connected clients, queue depth, backpressure events, Redis read latency, snapshot cache hits/misses, and Binance reconnects.
+- **Observable by default:** tracks 7 live metrics — Redis p95 read latency, per-symbol backpressure events, snapshot cache hit/miss rate, connected clients, and Binance reconnect counts,surfaced in a Grafana dashboard.
 - Load testing results:
 
 | Max VUs | Snapshot success | WS connect success | Backpressure resyncs | WS messages/sec | Snapshot p95 delay |
@@ -38,7 +45,8 @@ The core of the project is the end-to-end handling of live, high-frequency data:
 ### Frontend orderbook
 ![Orderbook](https://raw.githubusercontent.com/TheBighi/TheBighi/refs/heads/main/images/Screenshot%202026-07-09%20165150.png)
 
-### Grafana (UV 200 3m10s test)
+### Grafana, 200 concurrent WebSocket clients
+Showing live update throughput, connected clients, Redis read latency under k6 spike load etc.
 ![Grafana](https://raw.githubusercontent.com/TheBighi/TheBighi/refs/heads/main/images/Screenshot%202026-07-09%20165712.png)
 
 ## Architecture
@@ -263,3 +271,10 @@ Recorded results in `load-test/results.md`:
 - The frontend still runs outside Docker and talks to `localhost:8000`.
 - The backend starts Binance consumers lazily per symbol when a snapshot or WebSocket request arrives.
 - Snapshot responses use a short in-memory cache to avoid hammering Redis during connection spikes.
+
+## What's Next
+
+- **Kafka event log:** replace Redis Pub/Sub with Kafka to get durable 
+  replay — historical order book state could be reconstructed from any 
+  point in time, and multiple independent consumers could subscribe without 
+  contention.
