@@ -13,28 +13,25 @@ exposes enough metrics to understand how the system behaves under load.
 
 ## What It Does
 
-- Streams live Binance order book deltas and trades for `BTCUSDT`, `ETHUSDT`, `SOLUSDT`, `BNBUSDT`, and `XRPUSDT`.
-- Builds a sequence-safe local order book by loading the Binance REST snapshot and applying only aligned WebSocket deltas.
-- Stores bid/ask levels in Redis sorted sets with companion quantity hashes for fast top-N reads.
-- Publishes normalized deltas and trades through Redis Pub/Sub.
-- Serves REST snapshots (of the symbol current state) and WebSocket streams from FastAPI.
-- Coalesces order book deltas into 100ms batches so the frontend receives useful updates without being spammed by every raw exchange event.
-- Detects slow WebSocket clients with per-client queues and sends a `resync_required` message instead of letting stale updates pile up forever.
-- Renders an order book, cumulative depth chart, latest delta panel, trade feed, and client-side render/update metrics in React.
-- Exposes Prometheus metrics and ships with Grafana provisioning for backend health and pipeline visibility.
-- Includes a k6 WebSocket spike test for concurrent virtual users.
+- Streams live Binance order book and trade data for `BTCUSDT`, `ETHUSDT`, `SOLUSDT`, `BNBUSDT`, and `XRPUSDT`.
+- Builds a sequence-safe local order book from REST snapshots and WebSocket deltas.
+- Stores market data in Redis and publishes updates via Pub/Sub.
+- Serves REST snapshots and real-time WebSocket streams with FastAPI.
+- Batches updates every 100ms and handles slow clients with automatic resyncs.
+- Displays an order book, depth chart, trade feed, and performance metrics in React.
+- Monitors the system with Prometheus, Grafana, and k6 load testing.
 
 ## Project Highlights
 
 The core of the project is the end-to-end handling of live, high-frequency data:
 
-- **Correct market-data sync:** `backend/app/ws/ws_consumer.py` starts with a Binance REST depth snapshot, buffers live events while the snapshot loads, validates update sequence IDs, and resyncs when a gap appears.
-- **Fast top-of-book reads:** Redis sorted sets keep prices ordered, while hashes preserve quantities. Snapshots read the best bids/asks without scanning the full book.
-- **Async fan-out:** FastAPI runs ingestion, Redis subscription, and coalesced broadcasting as background asyncio tasks instead of tying them to request lifetimes.
-- **Backpressure behavior:** each client has a bounded async send queue. If the queue fills, the server clears stale messages and asks that client to reload a fresh snapshot.
-- **Frontend frame control:** `useOrderBook.js` buffers incoming deltas and applies them on `requestAnimationFrame`, which keeps rendering responsive during bursts.
-- **Observable by default:** tracks 7 live metrics — Redis p95 read latency, per-symbol backpressure events, snapshot cache hit/miss rate, connected clients, and Binance reconnect counts,surfaced in a Grafana dashboard.
-- Load testing results:
+- **Market-data sync:** Starts from a Binance REST snapshot, applies buffered WebSocket events, validates sequence IDs, and resyncs on gaps.
+- **Fast reads:** Uses Redis sorted sets and hashes for efficient top-of-book snapshots.
+- **Async architecture:** Handles ingestion, Redis subscriptions, and broadcasting with background asyncio tasks.
+- **Backpressure handling:** Uses bounded client queues and triggers resyncs when clients fall behind.
+- **Frontend performance:** Batches order book updates with `requestAnimationFrame` for smooth rendering.
+- **Monitoring:** Tracks Redis latency, backpressure events, cache performance, clients, and Binance reconnects in Grafana.
+- **Load testing results:**
 
 | Max VUs | Snapshot success | WS connect success | Backpressure resyncs | WS messages/sec | Snapshot p95 delay |
 | --- | --- | --- | --- | --- | --- |
@@ -173,27 +170,6 @@ docker compose up -d --build backend
 ```
 
 Use this after changing backend Python files, `requirements.txt`, or `backend/Dockerfile`.
-
-## Local Backend Development
-
-Docker is the default path. If you want to run the backend directly with Python while coding, stop the Docker backend first because both use port `8000`.
-
-```powershell
-docker compose stop backend
-cd backend
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-The local backend defaults to Redis at `redis://:qwerty@localhost:6379`. In Docker, Compose sets:
-
-```text
-REDIS_URL=redis://:${REDIS_PASS}@redis:6379
-```
-
-Avoid `--reload` during load tests. Reload mode is useful while coding, but it adds a reloader process and makes stress-test results noisier.
 
 ## Monitoring
 
