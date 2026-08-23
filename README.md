@@ -11,6 +11,19 @@ exposes enough metrics to understand how the system behaves under load.
 > 200 concurrent clients · 518 WebSocket messages/sec ·  0 backpressure 
 > resyncs · 3.12ms snapshot p95 delay · under k6 spike load test
 
+## Images
+
+### Frontend orderbook
+![Orderbook](https://raw.githubusercontent.com/TheBighi/TheBighi/refs/heads/main/images/Screenshot%202026-07-09%20165150.png)
+
+### Grafana, 200 concurrent WebSocket clients
+Showing live update throughput, connected clients, Redis read latency under k6 spike load etc.
+![Grafana](https://raw.githubusercontent.com/TheBighi/TheBighi/refs/heads/main/images/Screenshot%202026-07-09%20165712.png)
+
+## Architecture
+
+![Architecture](https://raw.githubusercontent.com/TheBighi/TheBighi/refs/heads/main/images/Architecture.png)
+
 ## What It Does
 
 - Streams live Binance order book and trade data for `BTCUSDT`, `ETHUSDT`, `SOLUSDT`, `BNBUSDT`, and `XRPUSDT`.
@@ -37,18 +50,6 @@ The core of the project is the end-to-end handling of live, high-frequency data:
 | --- | --- | --- | --- | --- | --- |
 | 200 | 100% | 100% | 0 | ~518 | ~3.12ms |
 | 500 | 97.74% | 95.81% | 0 | ~1207 | ~3.92ms |
-## Images
-
-### Frontend orderbook
-![Orderbook](https://raw.githubusercontent.com/TheBighi/TheBighi/refs/heads/main/images/Screenshot%202026-07-09%20165150.png)
-
-### Grafana, 200 concurrent WebSocket clients
-Showing live update throughput, connected clients, Redis read latency under k6 spike load etc.
-![Grafana](https://raw.githubusercontent.com/TheBighi/TheBighi/refs/heads/main/images/Screenshot%202026-07-09%20165712.png)
-
-## Architecture
-
-![Architecture](https://raw.githubusercontent.com/TheBighi/TheBighi/refs/heads/main/images/Architecture.png)
 
 ## Tech Stack
 
