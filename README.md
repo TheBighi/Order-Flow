@@ -11,6 +11,8 @@ exposes enough metrics to understand how the system behaves under load.
 > 200 concurrent clients · 518 WebSocket messages/sec ·  0 backpressure 
 > resyncs · 3.12ms snapshot p95 delay · under k6 spike load test
 
+Live demo: https://orderflow.sandertamm.eu
+
 ## Images
 
 ### Frontend orderbook
