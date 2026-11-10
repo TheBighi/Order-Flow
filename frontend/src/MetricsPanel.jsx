@@ -1,8 +1,5 @@
 import { useEffect, useState } from 'react'
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'localhost:8000'
-
-const API_BASE_URL = 'http://' + BACKEND_URL
+import { API_BASE_URL } from './config'
 
 function parseConnectedClients(metricsText, symbol) {
   const pattern = new RegExp(`connected_clients\\{symbol="${symbol}"\\} ([0-9.]+)`)
