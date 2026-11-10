@@ -24,8 +24,12 @@ orderbook_coalescer = DeltaCoalescer(flush_ms=100)
 
 ALLOWED_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"}
 SNAPSHOT_CACHE_TTL_SECONDS = 0.5
+IDLE_TIMEOUT_SECONDS = 300
+IDLE_CHECK_INTERVAL_SECONDS = 15
 
 active_consumers: dict[str, asyncio.Task] = {}
+last_activity: dict[str, float] = {}
+consumer_locks: dict[str, asyncio.Lock] = {}
 snapshot_cache: dict[str, tuple[float, dict]] = {}
 snapshot_cache_locks: dict[str, asyncio.Lock] = {}
 
@@ -36,10 +40,16 @@ async def lifespan(app: FastAPI):
         redis_orderbook_subscriber(orderbook_manager, trade_manager, orderbook_coalescer)
     )
     coalescer_task = asyncio.create_task(orderbook_coalescer.flush_loop(orderbook_manager))
+    idle_task = asyncio.create_task(idle_consumer_reaper())
 
     yield
 
-    shutdown_tasks = [subscriber_task, coalescer_task, *active_consumers.values()]
+    shutdown_tasks = [
+        subscriber_task,
+        coalescer_task,
+        idle_task,
+        *active_consumers.values(),
+    ]
 
     for task in shutdown_tasks:
         task.cancel()
@@ -67,27 +77,101 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def ensure_consumer_running(symbol: str):
+def _consumer_lock(symbol: str) -> asyncio.Lock:
+    return consumer_locks.setdefault(symbol, asyncio.Lock())
+
+
+def has_active_clients(symbol: str) -> bool:
     symbol = symbol.upper()
+    return bool(orderbook_manager.clients.get(symbol)) or bool(
+        trade_manager.clients.get(symbol)
+    )
 
-    started = False
 
-    orderbook_key = f"{symbol}:orderbook"
-    trade_key = f"{symbol}:trades"
+async def ensure_consumer_running(symbol: str):
+    symbol = symbol.upper()
+    last_activity[symbol] = monotonic()
 
-    orderbook_task = active_consumers.get(orderbook_key)
-    if orderbook_task is None or orderbook_task.done():
-        active_consumers[orderbook_key] = asyncio.create_task(ws_consumer(symbol))
-        print(f"Started Binance order book consumer for {symbol}")
-        started = True
+    async with _consumer_lock(symbol):
+        last_activity[symbol] = monotonic()
+        started = False
 
-    trade_task = active_consumers.get(trade_key)
-    if trade_task is None or trade_task.done():
-        active_consumers[trade_key] = asyncio.create_task(trade_consumer(symbol))
-        print(f"Started Binance trade consumer for {symbol}")
-        started = True
+        orderbook_key = f"{symbol}:orderbook"
+        trade_key = f"{symbol}:trades"
 
-    return started
+        orderbook_task = active_consumers.get(orderbook_key)
+        if orderbook_task is None or orderbook_task.done():
+            active_consumers[orderbook_key] = asyncio.create_task(ws_consumer(symbol))
+            print(f"Started Binance order book consumer for {symbol}")
+            started = True
+
+        trade_task = active_consumers.get(trade_key)
+        if trade_task is None or trade_task.done():
+            active_consumers[trade_key] = asyncio.create_task(trade_consumer(symbol))
+            print(f"Started Binance trade consumer for {symbol}")
+            started = True
+
+        return started
+
+
+async def stop_consumers(symbol: str):
+    tasks = []
+
+    for stream in ("orderbook", "trades"):
+        task = active_consumers.pop(f"{symbol}:{stream}", None)
+
+        if task is not None and not task.done():
+            task.cancel()
+            tasks.append(task)
+
+    stopped = bool(tasks)
+
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    snapshot_cache.pop(symbol, None)
+    last_activity.pop(symbol, None)
+
+    try:
+        await redis_client.clear_orderbook(symbol)
+        await redis_client.clear_trades(symbol)
+    except Exception as e:
+        print(f"{symbol}: failed to clear idle state: {e}")
+
+    if stopped:
+        print(f"Idle timeout: stopped Binance consumers for {symbol}")
+
+    return stopped
+
+
+async def idle_consumer_reaper():
+    while True:
+        await asyncio.sleep(IDLE_CHECK_INTERVAL_SECONDS)
+        try:
+            
+            now = monotonic()
+
+            for symbol in ALLOWED_SYMBOLS:
+                if has_active_clients(symbol):
+                    last_activity[symbol] = now
+                    continue
+
+                last_seen = last_activity.get(symbol)
+
+                if last_seen is None or now - last_seen < IDLE_TIMEOUT_SECONDS:
+                    continue
+
+                async with _consumer_lock(symbol):
+                    if has_active_clients(symbol):
+                        last_activity[symbol] = monotonic()
+                        continue
+
+                    if monotonic() - last_activity.get(symbol, now) < IDLE_TIMEOUT_SECONDS:
+                        continue
+
+                    await stop_consumers(symbol)
+        except Exception as e:
+                    print(f"idle reaper error: {e}")
 
 def get_cached_snapshot(symbol: str):
     entry = snapshot_cache.get(symbol)
@@ -150,7 +234,7 @@ async def get_snapshot(symbol: str):
         raise HTTPException(status_code=404, detail="Unsupported symbol")
 
     record_snapshot_request(symbol)
-    ensure_consumer_running(symbol)
+    await ensure_consumer_running(symbol)
 
     return await get_snapshot_with_cache(symbol)
 
@@ -160,7 +244,7 @@ async def orderbook_websocket(websocket: WebSocket, symbol: str):
         await websocket.close(code=1008)
         return
     
-    ensure_consumer_running(symbol)
+    await ensure_consumer_running(symbol)
 
     symbol = symbol.upper()
     
@@ -182,7 +266,7 @@ async def get_recent_trades(symbol: str):
     if symbol.upper() not in ALLOWED_SYMBOLS:
         raise HTTPException(status_code=404, detail="Unsupported symbol")
 
-    ensure_consumer_running(symbol)
+    await ensure_consumer_running(symbol)
     return {
         "symbol": symbol.upper(),
         "trades": await redis_client.get_recent_trades(symbol.upper(), 50),
@@ -194,7 +278,7 @@ async def trades_websocket(websocket: WebSocket, symbol: str):
         await websocket.close(code=1008)
         return
 
-    ensure_consumer_running(symbol)
+    await ensure_consumer_running(symbol)
 
     symbol = symbol.upper()
     client_id = str(uuid.uuid4())
