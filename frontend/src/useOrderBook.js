@@ -29,6 +29,7 @@ export function useOrderBook() {
   const [backpressureStatus, setBackpressureStatus] = useState('ok')
 
   const wsRef = useRef(null)
+  const connectSeqRef = useRef(0)
   const activeSymbolRef = useRef('BTCUSDT')
   const bookRef = useRef({ bids: new Map(), asks: new Map() })
   const deltaBufferRef = useRef([])
@@ -108,9 +109,12 @@ export function useOrderBook() {
   const connect = useCallback(
     async (nextSymbol) => {
       const normalizedSymbol = nextSymbol.toUpperCase()
+      const connectSeq = connectSeqRef.current + 1
+      connectSeqRef.current = connectSeq
 
       if (wsRef.current) {
         wsRef.current.close()
+        wsRef.current = null
       }
 
       setSymbol(normalizedSymbol)
@@ -127,6 +131,10 @@ export function useOrderBook() {
 
       try {
         await loadSnapshot(normalizedSymbol)
+
+        if (connectSeq !== connectSeqRef.current) {
+          return
+        }
 
         const ws = new WebSocket(`${WS_BASE_URL}/ws/orderbook/${normalizedSymbol}`)
         wsRef.current = ws
@@ -201,6 +209,10 @@ export function useOrderBook() {
           setStatus('disconnected')
         }
       } catch (connectError) {
+        if (connectSeq !== connectSeqRef.current) {
+          return
+        }
+
         setStatus('error')
         setError(connectError.message)
       }
@@ -209,6 +221,8 @@ export function useOrderBook() {
   )
 
   const disconnect = useCallback(() => {
+    connectSeqRef.current += 1
+
     if (wsRef.current) {
       wsRef.current.close()
       wsRef.current = null

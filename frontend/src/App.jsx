@@ -29,6 +29,12 @@ function App() {
     connect(selectedSymbol)
   }
 
+  function handleSymbolChange(event) {
+    const nextSymbol = event.target.value
+    setSelectedSymbol(nextSymbol)
+    connect(nextSymbol)
+  }
+
   function handleDisconnect() {
     disconnect()
   }
@@ -59,7 +65,7 @@ function App() {
           <select
             aria-label="Symbol"
             value={selectedSymbol}
-            onChange={(event) => setSelectedSymbol(event.target.value)}
+            onChange={handleSymbolChange}
           >
             {SYMBOLS.map((nextSymbol) => (
               <option key={nextSymbol} value={nextSymbol}>
